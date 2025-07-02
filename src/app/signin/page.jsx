@@ -183,29 +183,27 @@ export default function Signin() {
                       <button 
                         type="button" 
                         className="td_center border-0 bg-transparent"
-                        onClick={() => {
-                          // Apple 로그인 구현
-                          supabase.auth.signInWithOAuth({
-                            provider: 'apple',
-                            options: {
-                              redirectTo: `${window.location.origin}/auth/callback`,
-                            },
-                          });
-                        }}
-                      >
-                        <i className="fa-brands fa-apple"></i>
-                      </button>
-                      <button 
-                        type="button" 
-                        className="td_center border-0 bg-transparent"
-                        onClick={() => {
-                          // Google 로그인 구현
-                          supabase.auth.signInWithOAuth({
-                            provider: 'google',
-                            options: {
-                              redirectTo: `${window.location.origin}/auth/callback`,
-                            },
-                          });
+                        onClick={async () => {
+                          try {
+                            setLoading(true);
+                            // Google 로그인 구현
+                            const { data, error } = await supabase.auth.signInWithOAuth({
+                              provider: 'google',
+                              options: {
+                                redirectTo: `${window.location.origin}/auth/callback`,
+                              },
+                            });
+                            
+                            if (error) {
+                              console.error('Google 로그인 오류:', error);
+                              setError(extractAuthError(error));
+                              setLoading(false);
+                            }
+                          } catch (err) {
+                            console.error('Google 로그인 예외 발생:', err);
+                            setError('인증 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+                            setLoading(false);
+                          }
                         }}
                       >
                         <i className="fa-brands fa-google"></i>
@@ -213,17 +211,36 @@ export default function Signin() {
                       <button 
                         type="button" 
                         className="td_center border-0 bg-transparent"
-                        onClick={() => {
-                          // Facebook 로그인 구현
-                          supabase.auth.signInWithOAuth({
-                            provider: 'facebook',
-                            options: {
-                              redirectTo: `${window.location.origin}/auth/callback`,
-                            },
-                          });
+                        style={{ backgroundColor: '#FEE500', borderRadius: '50%', width: '40px', height: '40px' }}
+                        onClick={async () => {
+                          try {
+                            setLoading(true);
+                            // Kakao 로그인 구현
+                            const { data, error } = await supabase.auth.signInWithOAuth({
+                              provider: 'kakao',
+                              options: {
+                                redirectTo: `${window.location.origin}/auth/callback`,
+                                queryParams: {
+                                  // Kakao 로그인에 필요한 추가 파라미터
+                                  display: 'popup',
+                                  prompt: 'login consent',
+                                },
+                              },
+                            });
+                            
+                            if (error) {
+                              console.error('Kakao 로그인 오류:', error);
+                              setError(extractAuthError(error));
+                              setLoading(false);
+                            }
+                          } catch (err) {
+                            console.error('Kakao 로그인 예외 발생:', err);
+                            setError('인증 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+                            setLoading(false);
+                          }
                         }}
                       >
-                        <i className="fa-brands fa-facebook-f"></i>
+                        <i className="fa-solid fa-comment" style={{ color: '#391B1B' }}></i>
                       </button>
                     </div>
                   </div>

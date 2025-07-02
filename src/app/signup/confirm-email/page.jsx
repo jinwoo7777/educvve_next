@@ -19,6 +19,7 @@ export default function ConfirmEmail() {
   const [error, setError] = useState('');
   const [verified, setVerified] = useState(false);
   const [email, setEmail] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const verifyEmail = async () => {
@@ -26,10 +27,23 @@ export default function ConfirmEmail() {
         setLoading(true);
         setError('');
         
-        // 먼저 현재 세션을 확인하여 이미 로그인되어 있는지 확인
-        const { data: { session } } = await supabase.auth.getSession();
+        // URL 파라미터 확인 (디버깅용)
+        console.log('이메일 확인 URL 파라미터:', {
+          token_hash: searchParams.get('token_hash'),
+          type: searchParams.get('type'),
+          next: searchParams.get('next')
+        });
         
-        if (session) {
+        // 먼저 현재 세션을 확인하여 이미 로그인되어 있는지 확인
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('세션 확인 오류:', sessionError);
+          throw sessionError;
+        }
+        
+        if (sessionData?.session) {
+          console.log('이미 로그인된 세션 발견:', sessionData.session);
           // 이미 로그인된 상태라면 대시보드로 리다이렉트
           router.push('/dashboard');
           return;
@@ -39,22 +53,37 @@ export default function ConfirmEmail() {
         const type = searchParams.get('type');
         const next = searchParams.get('next') || '/dashboard';
 
-        if (token_hash && type === 'signup') {
-          // 이메일 인증 처리
-          const { data, error } = await supabase.auth.verifyOtp({
-            token_hash: token_hash,
-            type: 'signup',
-          });
+        if (!token_hash) {
+          setError('인증 토큰이 없습니다. 유효한 이메일 인증 링크를 사용해주세요.');
+          setLoading(false);
+          return;
+        }
 
-          if (error) {
-            console.error('이메일 인증 오류:', error);
-            setError(extractAuthError(error));
-            setLoading(false);
-            return;
-          }
+        if (type !== 'signup' && type !== 'email') {
+          setError('유효하지 않은 인증 유형입니다.');
+          setLoading(false);
+          return;
+        }
 
-          // 사용자 프로필 정보 가져오기
-          if (data?.user?.id) {
+        // 이메일 인증 처리
+        console.log('이메일 인증 시도:', { token_hash, type });
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: token_hash,
+          type: type === 'signup' ? 'signup' : 'email',
+        });
+
+        if (error) {
+          console.error('이메일 인증 오류:', error);
+          setError(extractAuthError(error));
+          setLoading(false);
+          return;
+        }
+
+        console.log('이메일 인증 성공:', data);
+
+        // 사용자 프로필 정보 가져오기
+        if (data?.user?.id) {
+          try {
             const { data: profileData, error: profileError } = await supabase
               .from('profiles')
               .select('*')
@@ -63,33 +92,45 @@ export default function ConfirmEmail() {
 
             if (profileError) {
               console.error('프로필 정보 조회 오류:', profileError);
+              // 프로필 조회 실패해도 인증 자체는 성공으로 처리
+            } else {
+              console.log('사용자 프로필 정보:', profileData);
             }
+          } catch (profileErr) {
+            console.error('프로필 조회 중 예외 발생:', profileErr);
+            // 프로필 조회 실패해도 인증 자체는 성공으로 처리
           }
-
-          // 인증 성공
-          setVerified(true);
-          setEmail(data.user.email);
-          
-          // 3초 후에 로그인 페이지로 리다이렉트
-          const timer = setTimeout(() => {
-            router.push(`/signin?email_confirmation_sent=true&email=${encodeURIComponent(email || '')}`);
-          }, 3000);
-          
-          return () => clearTimeout(timer);
-        } else {
-          setError('유효하지 않은 인증 링크입니다.');
-          setLoading(false);
         }
+
+        // 인증 성공
+        setVerified(true);
+        setEmail(data.user?.email || '');
+        setMessage('이메일 인증이 완료되었습니다!');
+        
+        // 3초 후에 로그인 페이지로 리다이렉트
+        const timer = setTimeout(() => {
+          router.push(`/signin?email_confirmation_sent=true&email=${encodeURIComponent(data.user?.email || '')}`);
+        }, 3000);
+        
+        return () => clearTimeout(timer);
       } catch (err) {
         console.error('이메일 인증 처리 중 오류 발생:', err);
         setError('이메일 인증 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+        
+        // 최대 3번까지 자동 재시도
+        if (retryCount < 3) {
+          console.log(`인증 재시도 (${retryCount + 1}/3)...`);
+          setRetryCount(prevCount => prevCount + 1);
+          setTimeout(() => verifyEmail(), 1500);
+          return;
+        }
       } finally {
         setLoading(false);
       }
     };
 
     verifyEmail();
-  }, [searchParams]);
+  }, [searchParams, router, retryCount]);
 
   return (
     <Layout breadcrumbTitle="이메일 인증" breadcrumbSubtitle="이메일 인증">

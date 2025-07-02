@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Layout } from "@/layouts/Layout";
@@ -67,6 +65,8 @@ export default function Signup() {
     }
 
     try {
+      console.log('회원가입 시도:', formData);
+      
       // 1. 사용자 등록
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
@@ -76,31 +76,62 @@ export default function Signup() {
             full_name: formData.name,
             phone: formData.phone,
           },
-          emailRedirectTo: `${window.location.origin}/signin`,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
-      if (signUpError) throw signUpError;
+      if (signUpError) {
+        console.error('회원가입 오류:', signUpError);
+        throw signUpError;
+      }
+      
+      console.log('회원가입 성공:', authData);
 
-      // 2. 추가 사용자 정보 저장 (필요한 경우)
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: authData.user.id,
-          full_name: formData.name,
-          phone: formData.phone,
-          email: formData.email,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+      // 사용자 정보가 있는지 확인
+      if (!authData?.user?.id) {
+        throw new Error('사용자 정보를 찾을 수 없습니다.');
+      }
 
-      if (profileError) throw profileError;
+      try {
+        console.log('프로필 테이블에 사용자 정보 저장 시도...');
+        // 2. 추가 사용자 정보 저장
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: authData.user.id,
+            full_name: formData.name,
+            phone: formData.phone,
+            email: formData.email,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+
+        if (profileError) {
+          console.error('프로필 생성 오류:', profileError);
+          // 프로필 테이블이 없는 경우 오류 로그만 출력하고 계속 진행
+          console.log('프로필 테이블 오류가 발생했지만 회원가입은 성공적으로 진행합니다.');
+        } else {
+          console.log('프로필 생성 성공:', profileData);
+        }
+      } catch (profileErr) {
+        console.error('프로필 생성 예외:', profileErr);
+        // 프로필 테이블이 없는 경우 오류 로그만 출력하고 계속 진행
+        console.log('프로필 테이블 오류가 발생했지만 회원가입은 성공적으로 진행합니다.');
+      }
 
       // 3. 이메일 확인 페이지로 리다이렉트
       router.push('/signup/confirm-email?email=' + encodeURIComponent(formData.email));
     } catch (error) {
       console.error('회원가입 중 오류 발생:', error);
-      setError(extractAuthError(error));
+      
+      // 오류 메시지 처리 개선
+      if (error.message?.includes('already registered')) {
+        setError('이미 등록된 이메일 주소입니다. 로그인해주세요.');
+      } else if (error.message?.includes('password')) {
+        setError('비밀번호가 유효하지 않습니다. 최소 6자 이상의 안전한 비밀번호를 입력해주세요.');
+      } else {
+        setError(extractAuthError(error) || '회원가입 중 오류가 발생했습니다. 다시 시도해주세요.');
+      }
     } finally {
       setLoading(false);
     }
@@ -174,15 +205,68 @@ export default function Signup() {
                       다른방법으로 가입하기
                     </p>
                     <div className="td_form_social td_fs_20">
-                      <a href="#" className="td_center">
-                        <i className="fa-brands fa-apple"></i>
-                      </a>
-                      <a href="#" className="td_center">
+                      <button 
+                        type="button" 
+                        className="td_center border-0 bg-transparent"
+                        onClick={async () => {
+                          try {
+                            setLoading(true);
+                            // Google 로그인 구현
+                            const { data, error } = await supabase.auth.signInWithOAuth({
+                              provider: 'google',
+                              options: {
+                                redirectTo: `${window.location.origin}/auth/callback`,
+                              },
+                            });
+                            
+                            if (error) {
+                              console.error('Google 로그인 오류:', error);
+                              setError(extractAuthError(error));
+                              setLoading(false);
+                            }
+                          } catch (err) {
+                            console.error('Google 로그인 예외 발생:', err);
+                            setError('인증 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+                            setLoading(false);
+                          }
+                        }}
+                      >
                         <i className="fa-brands fa-google"></i>
-                      </a>
-                      <a href="#" className="td_center">
-                        <i className="fa-brands fa-facebook-f"></i>
-                      </a>
+                      </button>
+                      <button 
+                        type="button" 
+                        className="td_center border-0 bg-transparent"
+                        style={{ backgroundColor: '#FEE500', borderRadius: '50%', width: '40px', height: '40px' }}
+                        onClick={async () => {
+                          try {
+                            setLoading(true);
+                            // Kakao 로그인 구현
+                            const { data, error } = await supabase.auth.signInWithOAuth({
+                              provider: 'kakao',
+                              options: {
+                                redirectTo: `${window.location.origin}/auth/callback`,
+                                queryParams: {
+                                  // Kakao 로그인에 필요한 추가 파라미터
+                                  display: 'popup',
+                                  prompt: 'login consent',
+                                },
+                              },
+                            });
+                            
+                            if (error) {
+                              console.error('Kakao 로그인 오류:', error);
+                              setError(extractAuthError(error));
+                              setLoading(false);
+                            }
+                          } catch (err) {
+                            console.error('Kakao 로그인 예외 발생:', err);
+                            setError('인증 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+                            setLoading(false);
+                          }
+                        }}
+                      >
+                        <i className="fa-solid fa-comment" style={{ color: '#391B1B' }}></i>
+                      </button>
                     </div>
                   </div>
                   <p className="td_form_card_text td_fs_20 td_medium td_heading_color mb-0">
