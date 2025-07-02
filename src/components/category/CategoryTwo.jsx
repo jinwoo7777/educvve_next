@@ -88,7 +88,7 @@ export const CategoryTwo = () => {
           data-wow-delay="0.2s"
         >
           <p className="td_section_subtitle_up td_fs_18 td_semibold td_spacing_1 td_mb_10 text-uppercase td_accent_color">
-            "수학의 문" 미리보기
+            &quot;수학의 문&quot; 미리보기
           </p>
           <h2 className="td_section_title td_fs_48 mb-0">
             수학의 문 장점을을 살펴보세요
