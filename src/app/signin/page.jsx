@@ -1,6 +1,8 @@
 "use client";
 
-"use client";
+// 동적 렌더링 설정 추가
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
